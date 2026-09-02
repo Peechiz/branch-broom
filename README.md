@@ -1,16 +1,14 @@
 # branch-broom
 
-Interactive cleanup for the local git branches you've worked on. Lists only branches you authored (not everything on the remote), lets you multi-select, and deletes them.
+Interactive cleanup for the local git branches you've worked on. Lists mostly just branches you authored (not everything on the remote), lets you multi-select, and deletes them.
 
 ## Setup on a new machine
 
-Needs [Bun](https://bun.sh) 1.4+ and git. Nothing else — no global npm packages, no Node.
+Needs [Bun](https://bun.sh) 1.4+
 
 ```bash
-curl -fsSL https://bun.sh/install | bash     # skip if bun is already installed
-git clone <this-repo> ~/src/branch-broom
-cd ~/src/branch-broom
-bun install                                  # @clack/prompts + types
+// clone the repo somewhere, cd in
+bun install                                 
 bun link                                     # puts `broom` on your PATH
 ```
 
@@ -47,21 +45,6 @@ broom --dry-run    # see the list, delete nothing
 broom -v           # add dates, shas and ahead-counts
 ```
 
-Or without installing: `bun run /path/to/branch-broom/src/cli.ts`
-
-## Keys
-
-Prompts are [@clack/prompts](https://github.com/bombshell-dev/clack). Up to 12 branches you get the plain checkbox list; above that it switches to the searchable one automatically.
-
-| key | plain list | search list (13+ branches) |
-|---|---|---|
-| `↑`/`↓` | move | move |
-| `space` | toggle | types a space into the search |
-| `tab` | — | toggle highlighted |
-| letters | — | filter |
-| `enter` | confirm | confirm |
-| `esc` / `ctrl-c` | cancel | cancel |
-
 ## Options
 
 ```
@@ -95,22 +78,3 @@ Patterns are globs via `Bun.Glob`: `*` stays inside one path segment (`release/*
 
 Protected rows stay visible in the list, struck through, with a hint saying which rule caught them. `--no-protect` drops every rule for one run; the current branch is never deletable.
 
-## Behavior
-
-- **"Worked on by me"** = you authored the branch tip, or you authored any commit on the branch that isn't on the base branch, or the branch has nothing ahead of the base at all. That last case matters: once your work is merged, the branch has no unique commits to attribute and its tip is whatever base commit it sits on - often someone else's merge - so authorship can't be judged and the branch is shown rather than hidden. Run with `-v` to see which branches were hidden and who authored them. Base branch is `origin/HEAD`, falling back to `origin/main`, `origin/master`, `main`, `master`, `develop`.
-- Built-in protected names: `main`, `master`, `develop`, `development`, `trunk`, plus anything from `broom.protect` and `--protect`.
-- Each row is `✅` merged into base or `🔴` not merged, plus `👻` when the upstream branch is gone. `-v` adds the commit date and `+N` unmerged commit count; without it rows are just status and name.
-- Current branch and protected names stay in the list as struck-through disabled rows, so you can see them without being able to pick them.
-- Deletes with `git branch -d`. Anything git refuses as unmerged is collected and offered as a second `-D` pass, and the sha is printed so you can `git branch <name> <sha>` to undo.
-
-## Colors
-
-`src/theme.ts` holds the whole palette as hex and runs it through `Bun.color(hex, "ansi")`, so it degrades to whatever depth the terminal reports. Colors turn off when stdout is not a TTY or `NO_COLOR` is set.
-
-## Develop
-
-```
-bun run src/cli.ts --dry-run   # run from source
-bunx tsc --noEmit              # typecheck
-bun run build                  # compile ./broom standalone binary
-```
