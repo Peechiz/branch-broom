@@ -1,0 +1,23 @@
+{
+  "name": "branch-broom",
+  "version": "0.1.0",
+  "description": "Interactively multi-select and delete the local git branches you've worked on",
+  "type": "module",
+  "module": "src/cli.ts",
+  "bin": {
+    "broom": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "build": "bun build ./src/cli.ts --compile --outfile broom"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0"
+  }
+}
