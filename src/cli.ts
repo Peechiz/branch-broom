@@ -22,7 +22,8 @@ import {
   type Branch,
   type ProtectRule,
 } from "./git.ts";
-import { c, stripAnsi } from "./theme.ts";
+import { c } from "./theme.ts";
+import { GONE, LEGEND, MERGED, SEARCH_THRESHOLD, UNMERGED, bail, meta, nameColumn, pad, row } from "./ui.ts";
 
 const HELP = `branch-broom - sweep up local git branches you've worked on
 
@@ -47,7 +48,7 @@ per-repo protected branches live in git config, not in the repo:
 patterns are globs (Bun.Glob): * stays inside one path segment, ** crosses.
 
 keys: up/down move, space toggle, enter confirm, esc cancel
-      over 12 branches the list becomes a search box: type to filter,
+      over ${SEARCH_THRESHOLD} branches the list becomes a search box: type to filter,
       tab toggles the highlighted branch, enter confirms
 `;
 
@@ -130,34 +131,6 @@ const DEFAULT_PROTECTED: ProtectRule[] = [
   "development",
   "trunk",
 ].map((pattern) => ({ pattern, source: "default" as const }));
-/** Above this many branches, swap the plain list for the searchable one. */
-const SEARCH_THRESHOLD = 12;
-
-const MERGED = "\u2705"; // white heavy check mark
-const UNMERGED = "\u{1F534}"; // red circle
-const GONE = "\u{1F47B}"; // ghost - remote branch is gone
-const LEGEND = `${MERGED} merged  ${UNMERGED} unmerged  ${GONE} gone`;
-
-/** Everything after the branch name; empty unless --verbose. */
-function meta(b: Branch, verbose: boolean): string {
-  if (!verbose) return "";
-  const ahead = !b.mergedIntoBase && b.aheadOfBase > 0 ? ` ${c.red(`+${b.aheadOfBase}`)}` : "";
-  return `${c.dim(b.lastCommitRel)}${ahead}`;
-}
-
-/**
- * Pad to a visible column width, always leaving `min` spaces so a long name
- * never butts up against the next column. Bun.stringWidth skips ANSI and
- * counts emoji as the two columns they actually occupy.
- */
-function pad(s: string, width: number, min = 2): string {
-  return s + " ".repeat(Math.max(min, width - Bun.stringWidth(s)));
-}
-
-function bail(message: string): never {
-  cancel(message);
-  process.exit(1);
-}
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
@@ -212,7 +185,7 @@ async function main() {
     return;
   }
 
-  const nameWidth = Math.min(40, Math.max(...branches.map((b) => b.name.length)));
+  const nameWidth = nameColumn(branches);
 
   const options = branches.map((b) => {
     const rule = protectedBy(b.name);
@@ -221,12 +194,9 @@ async function main() {
     const why = b.isCurrent ? " (current branch)" : rule ? " (protected)" : "";
     const name = `${b.mergedIntoBase ? MERGED : UNMERGED} ${b.name}${b.upstreamGone ? ` ${GONE}` : ""}${why}`;
     const tail = meta(b, opts.verbose);
-    // Disabled rows get a plain label: clack strikes them through, and our own
-    // color resets would cut that styling off mid-line.
-    const label = `${tail ? pad(name, nameWidth + 6) : name}${disabled ? stripAnsi(tail) : tail}`;
     return {
       value: b.name,
-      label,
+      label: row(name, tail, nameWidth, disabled),
       // Hints show on the highlighted row. Keep them for the one case where
       // they say something the label cannot: which rule protected the branch.
       // Commit details are noise here, so they wait for --verbose.

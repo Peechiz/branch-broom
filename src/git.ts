@@ -9,6 +9,8 @@ export type Branch = {
   authorEmail: string;
   isCurrent: boolean;
   upstream: string;
+  /** Raw `%(upstream:track)`, e.g. "[ahead 2, behind 1]" or "" when in sync. */
+  track: string;
   upstreamGone: boolean;
   mergedIntoBase: boolean;
   aheadOfBase: number;
@@ -106,6 +108,7 @@ export function listBranches(base: string | null, emails: string[]): Branch[] {
       authorEmail,
       isCurrent: head === "*",
       upstream: upstream || "",
+      track: track || "",
       upstreamGone: (track || "").includes("gone"),
       mergedIntoBase: mergedSet.has(name),
       aheadOfBase,
@@ -175,4 +178,20 @@ export function protectMatcher(rules: ProtectRule[]): (name: string) => ProtectR
 
 export function deleteBranch(name: string, force: boolean): { ok: boolean; out: string } {
   return gitTry(["branch", force ? "-D" : "-d", name]);
+}
+
+export function switchBranch(name: string): { ok: boolean; out: string } {
+  return gitTry(["switch", name]);
+}
+
+/** Paths with uncommitted changes, untracked files included. */
+export function dirtyPaths(): string[] {
+  const r = gitTry(["status", "--porcelain"]);
+  if (!r.ok || !r.out) return [];
+  return r.out.split("\n").filter(Boolean);
+}
+
+/** Stash everything, untracked included, so a blocked switch can go through. */
+export function stashAll(message: string): { ok: boolean; out: string } {
+  return gitTry(["stash", "push", "--include-untracked", "-m", message]);
 }

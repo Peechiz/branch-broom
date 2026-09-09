@@ -1,15 +1,19 @@
 {
   "name": "branch-broom",
   "version": "0.1.0",
-  "description": "Interactively multi-select and delete the local git branches you've worked on",
+  "description": "Interactively pick local git branches to delete (broom) or check out (switch)",
   "type": "module",
   "module": "src/cli.ts",
   "bin": {
-    "broom": "src/cli.ts"
+    "broom": "src/cli.ts",
+    "switch": "src/switch.ts"
   },
   "scripts": {
     "start": "bun run src/cli.ts",
-    "build": "bun build ./src/cli.ts --compile --outfile broom"
+    "switch": "bun run src/switch.ts",
+    "build": "bun run build:broom && bun run build:switch",
+    "build:broom": "bun build ./src/cli.ts --compile --outfile broom",
+    "build:switch": "bun build ./src/switch.ts --compile --outfile switch"
   },
   "devDependencies": {
     "@types/bun": "latest"
