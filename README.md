@@ -130,7 +130,7 @@ git config --local --add broom.target 'fb/*'        # origin/fb/... count
 git config --local --add broom.target 'release/*'
 ```
 
-Globs match remote branch names without the remote (`fb/*` matches `origin/fb/RENT-123-thing`) and are layered across config scopes like `broom.protect`. A branch's own remote copy never counts. With `-v`, rows merged into a target rather than the base show `→ <target>`.
+Globs match remote branch names without the remote (`fb/*` matches `origin/fb/RENT-123-thing`) and are layered across config scopes like `broom.protect`. A branch's own remote copy never counts. A branch also counts as merged when every one of its commits has an identical copy in the base or a target, so a PR that was rebased after your local branch last moved still shows `✅` (squash merges don't). With `-v`, rows merged into a target rather than the base show `→ <target>`.
 
 ## Behavior
 

@@ -107,6 +107,46 @@ function isOwnRemote(target: string, name: string, upstream: string): boolean {
   return target === upstream || target.slice(target.indexOf("/") + 1) === name;
 }
 
+/**
+ * First target holding an identical copy of every commit unique to the branch,
+ * which catches a PR that was rebased (or rebase-merged) after the local
+ * branch last moved. Rebasing keeps author time and subject, so one `git log`
+ * finds the likely copies; `git cherry` then confirms the patches match.
+ */
+function patchMergedInto(name: string, upstream: string, targets: string[]): string | null {
+  const others = targets.filter((t) => !isOwnRemote(t, name, upstream));
+  if (others.length === 0) return null;
+
+  const unique = gitTry(["log", "--reverse", "--topo-order", "--format=%H%x1f%P%x1f%at%x1f%s", name, "--not", ...others]);
+  if (!unique.ok || !unique.out) return null;
+  const commits = unique.out.split("\n").map((l) => l.split(SEP));
+  const forkPoint = commits[0]![1]!.split(" ")[0];
+  if (!forkPoint) return null;
+
+  const copies = gitTry(["log", "--format=%H%x1f%at%x1f%s", ...others, "--not", forkPoint]);
+  if (!copies.ok) return null;
+  const copyByKey = new Map(
+    copies.out.split("\n").map((l) => {
+      const [sha, at, subject] = l.split(SEP);
+      return [`${at}${SEP}${subject}`, sha] as const;
+    }),
+  );
+  const newest = commits[commits.length - 1]!;
+  const newestCopy = copyByKey.get(`${newest[2]}${SEP}${newest[3]}`);
+  if (!newestCopy || !commits.every((c) => copyByKey.has(`${c[2]}${SEP}${c[3]}`))) return null;
+
+  const containing = new Set(
+    git(["for-each-ref", "--format=%(refname:short)", "--contains", newestCopy, "refs/remotes"]).split("\n"),
+  );
+  return (
+    others.find((t) => {
+      if (!containing.has(t)) return false;
+      const cherry = gitTry(["cherry", t, name]);
+      return cherry.ok && cherry.out !== "" && cherry.out.split("\n").every((l) => l.startsWith("-"));
+    }) ?? null
+  );
+}
+
 const SEP = "\x1f";
 
 export function listBranches(base: string | null, emails: string[], targets: string[]): Branch[] {
@@ -140,6 +180,10 @@ export function listBranches(base: string | null, emails: string[], targets: str
       if (c.ok) aheadOfBase = Number(c.out) || 0;
     }
 
+    const mergedInto =
+      (mergedTargets.get(name) ?? []).find((t) => t === base || !isOwnRemote(t, name, upstream)) ??
+      patchMergedInto(name, upstream, targets);
+
     return {
       name,
       sha: (sha || "").slice(0, 7),
@@ -151,8 +195,7 @@ export function listBranches(base: string | null, emails: string[], targets: str
       upstream: upstream || "",
       track: track || "",
       upstreamGone: (track || "").includes("gone"),
-      mergedInto:
-        (mergedTargets.get(name) ?? []).find((t) => t === base || !isOwnRemote(t, name, upstream)) ?? null,
+      mergedInto,
       aheadOfBase,
       minePersonally: mine(name, base, emails, authorEmail, aheadOfBase),
     };
