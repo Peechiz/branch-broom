@@ -14,8 +14,9 @@ export const SEARCH_THRESHOLD = 12;
 /** Everything after the branch name; empty unless --verbose. */
 export function meta(b: Branch, verbose: boolean): string {
   if (!verbose) return "";
-  const ahead = !b.mergedIntoBase && b.aheadOfBase > 0 ? ` ${c.red(`+${b.aheadOfBase}`)}` : "";
-  return `${c.dim(b.lastCommitRel)}${ahead}`;
+  const ahead = !b.mergedInto && b.aheadOfBase > 0 ? ` ${c.red(`+${b.aheadOfBase}`)}` : "";
+  const into = b.mergedInto && b.aheadOfBase > 0 ? ` ${c.dim(`→ ${b.mergedInto.replace(/^[^/]+\//, "")}`)}` : "";
+  return `${c.dim(b.lastCommitRel)}${ahead}${into}`;
 }
 
 /**

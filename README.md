@@ -51,11 +51,6 @@ broom --dry-run    # see the list, delete nothing
 broom -v           # add dates, shas and ahead-counts
 ```
 
-<<<<<<< HEAD
-
-## Options
-
-=======
 Or without installing: `bun run /path/to/branch-broom/src/cli.ts`
 
 ## Run switch
@@ -95,8 +90,6 @@ Prompts are [@clack/prompts](https://github.com/bombshell-dev/clack). Up to 12 b
 
 ## broom options
 
-> > > > > > > 4e3faa7 (add switch command to switch branches)
-
 ```
 -a, --all              every local branch, not just ones you authored
 -m, --merged           only branches merged into the base branch
@@ -128,13 +121,22 @@ Patterns are globs via `Bun.Glob`: `*` stays inside one path segment (`release/*
 
 Protected rows stay visible in the list, struck through, with a hint saying which rule caught them. `--no-protect` drops every rule for one run; the current branch is never deletable.
 
-# <<<<<<< HEAD
+## Merge targets
+
+By default a branch counts as merged only once it reaches the base branch. If you merge PRs into long-lived feature or release branches first, list them as merge targets:
+
+```
+git config --local --add broom.target 'fb/*'        # origin/fb/... count
+git config --local --add broom.target 'release/*'
+```
+
+Globs match remote branch names without the remote (`fb/*` matches `origin/fb/RENT-123-thing`) and are layered across config scopes like `broom.protect`. A branch's own remote copy never counts. With `-v`, rows merged into a target rather than the base show `→ <target>`.
 
 ## Behavior
 
 - **"Worked on by me"** = you authored the branch tip, or you authored any commit on the branch that isn't on the base branch, or the branch has nothing ahead of the base at all. That last case matters: once your work is merged, the branch has no unique commits to attribute and its tip is whatever base commit it sits on - often someone else's merge - so authorship can't be judged and the branch is shown rather than hidden. Run with `-v` to see which branches were hidden and who authored them. Base branch is `origin/HEAD`, falling back to `origin/main`, `origin/master`, `main`, `master`, `develop`.
 - Built-in protected names: `main`, `master`, `develop`, `development`, `trunk`, plus anything from `broom.protect` and `--protect`.
-- Each row is `✅` merged into base or `🔴` not merged, plus `👻` when the upstream branch is gone. `-v` adds the commit date and `+N` unmerged commit count; without it rows are just status and name.
+- Each row is `✅` merged into base or a [merge target](#merge-targets), or `🔴` not merged, plus `👻` when the upstream branch is gone. `-v` adds the commit date and `+N` unmerged commit count; without it rows are just status and name.
 - Current branch and protected names stay in the list as struck-through disabled rows, so you can see them without being able to pick them.
 - Deletes with `git branch -d`. Anything git refuses as unmerged is collected and offered as a second `-D` pass, and the sha is printed so you can `git branch <name> <sha>` to undo.
 - `switch` checks out with `git switch` (git 2.23+) and shows the upstream it tracks when it lands. `switch -` is `git switch -`.
@@ -153,5 +155,3 @@ bun run build                     # compile ./broom and ./switch binaries
 ```
 
 Row rendering (icons, legend, column padding, the 12-branch search threshold) lives in `src/ui.ts` so both commands stay in sync; git plumbing is `src/git.ts`.
-
-> > > > > > > 4e3faa7 (add switch command to switch branches)

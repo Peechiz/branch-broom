@@ -12,7 +12,7 @@ export type Branch = {
   /** Raw `%(upstream:track)`, e.g. "[ahead 2, behind 1]" or "" when in sync. */
   track: string;
   upstreamGone: boolean;
-  mergedIntoBase: boolean;
+  mergedInto: string | null;
   aheadOfBase: number;
   minePersonally: boolean;
 };
@@ -62,9 +62,54 @@ export function baseBranch(): string | null {
   return null;
 }
 
+/** Globs from `broom.target` in git config, layered like `broom.protect`. */
+function configTargetPatterns(): string[] {
+  const r = gitTry(["config", "--get-all", "broom.target"]);
+  if (!r.ok || !r.out) return [];
+  return r.out
+    .split("\n")
+    .flatMap((line) => line.split(/[,\s]+/))
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Branches that count as "merged into": the base first, then every remote
+ * branch matching a `broom.target` glob. Globs match the name without its
+ * remote, so `fb/*` catches `origin/fb/RENT-123-thing`.
+ */
+export function mergeTargets(base: string | null): string[] {
+  const globs = configTargetPatterns().map((p) => new Bun.Glob(p));
+  const remotes = globs.length
+    ? git(["for-each-ref", "--format=%(refname:short)", "refs/remotes"]).split("\n").filter(Boolean)
+    : [];
+  const matched = remotes.filter((ref) => {
+    const name = ref.slice(ref.indexOf("/") + 1);
+    return name !== "HEAD" && ref !== base && globs.some((g) => g.match(name));
+  });
+  return base ? [base, ...matched] : matched;
+}
+
+/** Local branch -> every target whose history contains its tip. */
+function mergedTargetsByBranch(targets: string[]): Map<string, string[]> {
+  const byBranch = new Map<string, string[]>();
+  for (const target of targets) {
+    const merged = git(["branch", "--format=%(refname:short)", "--merged", target]).split("\n");
+    for (const name of merged.filter(Boolean)) {
+      byBranch.set(name, [...(byBranch.get(name) ?? []), target]);
+    }
+  }
+  return byBranch;
+}
+
+/** A branch is always contained in its own remote copy; that isn't a merge. */
+function isOwnRemote(target: string, name: string, upstream: string): boolean {
+  return target === upstream || target.slice(target.indexOf("/") + 1) === name;
+}
+
 const SEP = "\x1f";
 
-export function listBranches(base: string | null, emails: string[]): Branch[] {
+export function listBranches(base: string | null, emails: string[], targets: string[]): Branch[] {
   const fmt = [
     "%(refname:short)",
     "%(objectname)",
@@ -80,11 +125,7 @@ export function listBranches(base: string | null, emails: string[]): Branch[] {
   const raw = git(["for-each-ref", "--sort=-committerdate", `--format=${fmt}`, "refs/heads"]);
   if (!raw) return [];
 
-  const mergedSet = new Set(
-    base
-      ? git(["branch", "--format=%(refname:short)", "--merged", base]).split("\n").filter(Boolean)
-      : [],
-  );
+  const mergedTargets = mergedTargetsByBranch(targets);
 
   return raw.split("\n").map((line) => {
     const f = line.split(SEP);
@@ -110,7 +151,8 @@ export function listBranches(base: string | null, emails: string[]): Branch[] {
       upstream: upstream || "",
       track: track || "",
       upstreamGone: (track || "").includes("gone"),
-      mergedIntoBase: mergedSet.has(name),
+      mergedInto:
+        (mergedTargets.get(name) ?? []).find((t) => t === base || !isOwnRemote(t, name, upstream)) ?? null,
       aheadOfBase,
       minePersonally: mine(name, base, emails, authorEmail, aheadOfBase),
     };

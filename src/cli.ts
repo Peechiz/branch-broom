@@ -14,6 +14,7 @@ import {
 import {
   assertRepo,
   baseBranch,
+  mergeTargets,
   configProtectRules,
   deleteBranch,
   listBranches,
@@ -31,7 +32,7 @@ usage: broom [options]
 
 options:
   -a, --all              list every local branch, not just ones you authored
-  -m, --merged           only branches already merged into the base branch
+  -m, --merged           only branches already merged into the base or a merge target
   -g, --gone             only branches whose upstream is gone
       --author <email>   count this email as "me" too (repeatable)
       --protect <glob>   never offer branches matching this (repeatable)
@@ -46,6 +47,9 @@ per-repo protected branches live in git config, not in the repo:
   git config --global broom.protect main          # every repo
   git config --add    broom.protect 'hotfix/*'    # another pattern
 patterns are globs (Bun.Glob): * stays inside one path segment, ** crosses.
+
+branches merged into a long-lived remote branch count as merged too:
+  git config --local --add broom.target 'fb/*'   # origin/fb/... are merge targets
 
 keys: up/down move, space toggle, enter confirm, esc cancel
       over ${SEARCH_THRESHOLD} branches the list becomes a search box: type to filter,
@@ -142,7 +146,7 @@ async function main() {
   scan.start("scanning local branches");
   const base = baseBranch();
   const emails = opts.all ? [] : myEmails(opts.authors);
-  let branches = listBranches(base, emails);
+  let branches = listBranches(base, emails, mergeTargets(base));
   scan.stop(
     `${branches.length} local branch${branches.length === 1 ? "" : "es"}  ${c.dim(
       `base: ${base ?? "none"} · ${opts.all ? "all authors" : emails.join(", ") || "you"}`,
@@ -160,7 +164,7 @@ async function main() {
       ),
     );
   }
-  if (opts.mergedOnly) branches = branches.filter((b) => b.mergedIntoBase || b.isCurrent);
+  if (opts.mergedOnly) branches = branches.filter((b) => b.mergedInto || b.isCurrent);
   if (opts.goneOnly) branches = branches.filter((b) => b.upstreamGone || b.isCurrent);
 
   const rules: ProtectRule[] = opts.noProtect
@@ -192,7 +196,7 @@ async function main() {
     const disabled = b.isCurrent || rule !== null;
     // Say why a row is struck through: the strikethrough alone reads as an error.
     const why = b.isCurrent ? " (current branch)" : rule ? " (protected)" : "";
-    const name = `${b.mergedIntoBase ? MERGED : UNMERGED} ${b.name}${b.upstreamGone ? ` ${GONE}` : ""}${why}`;
+    const name = `${b.mergedInto ? MERGED : UNMERGED} ${b.name}${b.upstreamGone ? ` ${GONE}` : ""}${why}`;
     const tail = meta(b, opts.verbose);
     return {
       value: b.name,
@@ -231,7 +235,7 @@ async function main() {
   note(
     chosen
       .map((b) => {
-        const name = `${b.mergedIntoBase ? MERGED : UNMERGED} ${b.name}`;
+        const name = `${b.mergedInto ? MERGED : UNMERGED} ${b.name}`;
         return opts.verbose
           ? `${pad(name, nameWidth + 6)}${c.dim(`${b.sha}  ${b.lastCommitRel}`)}`
           : name;
@@ -240,11 +244,11 @@ async function main() {
     `${chosen.length} branch${chosen.length === 1 ? "" : "es"} to delete`,
   );
 
-  const unmerged = chosen.filter((b) => !b.mergedIntoBase);
+  const unmerged = chosen.filter((b) => !b.mergedInto);
   if (unmerged.length) {
     log.warn(
       c.yellow(
-        `not merged into ${base ?? "the base branch"}: ${unmerged.map((b) => b.name).join(", ")}`,
+        `not merged into ${base ?? "the base branch"} or a broom.target: ${unmerged.map((b) => b.name).join(", ")}`,
       ),
     );
   }

@@ -13,6 +13,7 @@ import {
 import {
   assertRepo,
   baseBranch,
+  mergeTargets,
   dirtyPaths,
   listBranches,
   myEmails,
@@ -33,7 +34,7 @@ usage: switch [options] [filter]
 options:
   -m, --mine             only branches you authored (default: every local branch)
       --author <email>   count this email as "me" too (repeatable, implies -m)
-      --merged           only branches already merged into the base branch
+      --merged           only branches already merged into the base or a merge target
       --stash            stash uncommitted changes without asking, if in the way
       --dry-run          show the pick, check nothing out
   -v, --verbose          add commit date, sha and ahead-count to each row
@@ -125,7 +126,7 @@ function jumpBack(): never {
 }
 
 function currentBranch(): string {
-  return listBranches(null, []).find((b) => b.isCurrent)?.name ?? "(detached)";
+  return listBranches(null, [], []).find((b) => b.isCurrent)?.name ?? "(detached)";
 }
 
 async function main() {
@@ -139,11 +140,11 @@ async function main() {
   scan.start("scanning local branches");
   const base = baseBranch();
   const emails = opts.mine ? myEmails(opts.authors) : [];
-  let branches = listBranches(base, emails);
+  let branches = listBranches(base, emails, mergeTargets(base));
   const total = branches.length;
 
   if (opts.mine) branches = branches.filter((b) => b.minePersonally || b.isCurrent);
-  if (opts.mergedOnly) branches = branches.filter((b) => b.mergedIntoBase || b.isCurrent);
+  if (opts.mergedOnly) branches = branches.filter((b) => b.mergedInto || b.isCurrent);
   const needle = opts.filter.toLowerCase();
   if (needle) branches = branches.filter((b) => b.name.toLowerCase().includes(needle) || b.isCurrent);
 
@@ -169,7 +170,7 @@ async function main() {
 
   const width = nameColumn(branches);
   const options = branches.map((b) => {
-    const marks = [b.mergedIntoBase ? MERGED : UNMERGED, b.name, b.upstreamGone ? GONE : ""]
+    const marks = [b.mergedInto ? MERGED : UNMERGED, b.name, b.upstreamGone ? GONE : ""]
       .filter(Boolean)
       .join(" ");
     const name = `${marks}${b.isCurrent ? " (current branch)" : ""}`;
